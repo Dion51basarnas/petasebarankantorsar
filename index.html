@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="initial-scale=1,user-scalable=no,maximum-scale=1,width=device-width">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <link rel="stylesheet" href="css/leaflet.css">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css">
+        <link rel="stylesheet" href="css/L.Control.Layers.Tree.css">
+        <link rel="stylesheet" href="css/qgis2web.css">
+        <link rel="stylesheet" href="css/fontawesome-all.min.css">
+        <link rel="stylesheet" href="css/leaflet.photon.css">
+        <style>
+        html, body, #map {
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            margin: 0;
+        }
+        </style>
+        <title>Peta Sebaran Kantor, Pos dan Unit Siaga Pencarian dan Pertolongan</title>
+    
+        <style>
+        .ortala-measure-panel {
+            background: rgba(255,255,255,0.97);
+            padding: 10px 12px;
+            border: 1px solid #b8c2cc;
+            border-radius: 6px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+            color: #263238;
+            font: 13px/1.45 Arial, sans-serif;
+            min-width: 205px;
+            max-width: 270px;
+        }
+        .ortala-measure-panel .panel-title {
+            font-weight: 700;
+            margin-bottom: 6px;
+            color: #153e59;
+        }
+        </style>
+
+    </head>
+    <body>
+        <div id="map">
+        </div>
+        <script src="js/qgis2web_expressions.js"></script>
+        <script src="js/leaflet.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+        <script src="js/L.Control.Layers.Tree.min.js"></script>
+        <script src="js/leaflet-svg-shape-markers.min.js"></script>
+        <script src="js/leaflet.rotatedMarker.js"></script>
+        <script src="js/leaflet.pattern.js"></script>
+        <script src="js/leaflet-hash.js"></script>
+        <script src="js/Autolinker.min.js"></script>
+        <script src="js/rbush.min.js"></script>
+        <script src="js/labelgun.min.js"></script>
+        <script src="js/labels.js"></script>
+        <script src="js/leaflet.photon.js"></script>
+        <script src="data/IndonesiaSRR_2.js"></script>
+        <script src="data/Geotagging_3.js"></script>
+        <script src="data/SaranaSAR_4.js"></script>
+        <script>
+        var map = L.map('map', {
+            zoomControl:false, maxZoom:28, minZoom:1
+        }).fitBounds([[-15.67427928135274,92.49233182737098],[9.369813575825473,140.07178285137104]]);
+        var hash = new L.Hash(map);
+        map.attributionControl.setPrefix('<a href="https://github.com/qgis2web/qgis2web" target="_blank">qgis2web</a> &middot; <a href="https://leafletjs.com" title="A JS library for interactive maps">Leaflet</a> &middot; <a href="https://qgis.org">QGIS</a>');
+        var autolinker = new Autolinker({truncate: {length: 30, location: 'smart'}});
+        // remove popup's row if "visible-with-data"
+        function removeEmptyRowsFromPopupContent(content, feature) {
+         var tempDiv = document.createElement('div');
+         tempDiv.innerHTML = content;
+         var rows = tempDiv.querySelectorAll('tr');
+         for (var i = 0; i < rows.length; i++) {
+             var td = rows[i].querySelector('td.visible-with-data');
+             var key = td ? td.id : '';
+             if (td && td.classList.contains('visible-with-data') && feature.properties[key] == null) {
+                 rows[i].parentNode.removeChild(rows[i]);
+             }
+         }
+         return tempDiv.innerHTML;
+        }
+        // modify popup if contains media
+        function addClassToPopupIfMedia(content, popup) {
+            var tempDiv = document.createElement('div');
+            tempDiv.innerHTML = content;
+            var imgTd = tempDiv.querySelector('td img');
+            if (imgTd) {
+                var src = imgTd.getAttribute('src');
+                if (/\.(jpg|jpeg|png|gif|bmp|webp|avif)$/i.test(src)) {
+                    popup._contentNode.classList.add('media');
+                    var img = popup._contentNode.querySelector('td img');
+                    if (img) {
+                        // If already loaded (cache), update immediately
+                        if (img.complete && img.naturalHeight > 0) {
+                            popup.update();
+                        } else {
+                            img.addEventListener('load', function() {
+                                popup.update();
+                            });
+                            img.addEventListener('error', function() {
+                                popup.update();
+                            });
+                        }
+                    }
+                } else if (/\.(mp3|wav|ogg|aac)$/i.test(src)) {
+                    var audio = document.createElement('audio');
+                    audio.controls = true;
+                    audio.src = src;
+                    imgTd.parentNode.replaceChild(audio, imgTd);
+                    popup._contentNode.classList.add('media');
+                    setTimeout(function() {
+                        popup.setContent(tempDiv.innerHTML);
+                        popup.update();
+                    }, 10);
+                } else if (/\.(mp4|webm|ogg|mov)$/i.test(src)) {
+                    var video = document.createElement('video');
+                    video.controls = true;
+                    video.src = src;
+                    video.style.width = "400px";
+                    video.style.height = "300px";
+                    video.style.maxHeight = "60vh";
+                    video.style.maxWidth = "60vw";
+                    imgTd.parentNode.replaceChild(video, imgTd);
+                    popup._contentNode.classList.add('media');
+                    // Aggiorna il popup quando il video carica i metadati
+                    video.addEventListener('loadedmetadata', function() {
+                        popup.update();
+                    });
+                    setTimeout(function() {
+                        popup.setContent(tempDiv.innerHTML);
+                        popup.update();
+                    }, 10);
+                } else {
+                    popup._contentNode.classList.remove('media');
+                }
+            } else {
+                popup._contentNode.classList.remove('media');
+            }
+        }
+        var title = new L.Control({'position':'topright'});
+        title.onAdd = function (map) {
+            this._div = L.DomUtil.create('div', 'info');
+            this.update();
+            return this._div;
+        };
+        title.update = function () {
+            this._div.innerHTML = '<h2>Peta Sebaran Kantor, Pos dan Unit Siaga Pencarian dan Pertolongan</h2>';
+        };
+        title.addTo(map);
+        var zoomControl = L.control.zoom({
+            position: 'topleft'
+        }).addTo(map);
+        var bounds_group = new L.featureGroup([]);
+        function setBounds() {
+        }
+        map.createPane('pane_GoogleRoad_0');
+        map.getPane('pane_GoogleRoad_0').style.zIndex = 400;
+        var layer_GoogleRoad_0 = L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+            pane: 'pane_GoogleRoad_0',
+            opacity: 1.0,
+            attribution: '<a href="https://www.google.at/permissions/geoguidelines/attr-guide.html">Map data ©2015 Google</a>',
+            minZoom: 1,
+            maxZoom: 28,
+            minNativeZoom: 0,
+            maxNativeZoom: 20
+        });
+        layer_GoogleRoad_0;
+        map.addLayer(layer_GoogleRoad_0);
+        map.createPane('pane_GoogleSatellite_1');
+        map.getPane('pane_GoogleSatellite_1').style.zIndex = 401;
+        var layer_GoogleSatellite_1 = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+            pane: 'pane_GoogleSatellite_1',
+            opacity: 1.0,
+            attribution: '<a href="https://www.google.at/permissions/geoguidelines/attr-guide.html">Map data ©2015 Google</a>',
+            minZoom: 1,
+            maxZoom: 28,
+            minNativeZoom: 0,
+            maxNativeZoom: 20
+        });
+        layer_GoogleSatellite_1;
+        map.addLayer(layer_GoogleSatellite_1);
+        function pop_IndonesiaSRR_2(feature, layer) {
+            var popupContent = '<table>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['Name'] !== null ? autolinker.link(String(feature.properties['Name']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_IndonesiaSRR_2_0() {
+            return {
+                pane: 'pane_IndonesiaSRR_2',
+                opacity: 1,
+                color: 'rgba(236,236,236,1.0)',
+                dashArray: '1.0,2.0',
+                lineCap: 'square',
+                lineJoin: 'bevel',
+                weight: 1.0,
+                fillOpacity: 0,
+                interactive: true,
+            }
+        }
+        map.createPane('pane_IndonesiaSRR_2');
+        map.getPane('pane_IndonesiaSRR_2').style.zIndex = 402;
+        map.getPane('pane_IndonesiaSRR_2').style['mix-blend-mode'] = 'normal';
+        var layer_IndonesiaSRR_2 = new L.geoJson(json_IndonesiaSRR_2, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_IndonesiaSRR_2',
+            layerName: 'layer_IndonesiaSRR_2',
+            pane: 'pane_IndonesiaSRR_2',
+            onEachFeature: pop_IndonesiaSRR_2,
+            style: style_IndonesiaSRR_2_0,
+        });
+        bounds_group.addLayer(layer_IndonesiaSRR_2);
+        map.addLayer(layer_IndonesiaSRR_2);
+        function pop_Geotagging_3(feature, layer) {
+            var popupContent = '<table>\
+                    <tr>\
+                        <th scope="row">No</th>\
+                        <td>' + (feature.properties['No'] !== null ? autolinker.link(String(feature.properties['No']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Nama</th>\
+                        <td>' + (feature.properties['Nama Unit'] !== null ? autolinker.link(String(feature.properties['Nama Unit']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Induk Kantor</th>\
+                        <td>' + (feature.properties['Induk Kant'] !== null ? autolinker.link(String(feature.properties['Induk Kant']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Tipe</th>\
+                        <td>' + (feature.properties['Tipe'] !== null ? autolinker.link(String(feature.properties['Tipe']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Keterangan</th>\
+                        <td>' + (feature.properties['Keterangan'] !== null ? autolinker.link(String(feature.properties['Keterangan']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Jumlah ASN</th>\
+                        <td>' + (feature.properties['Jumlah PNS'] !== null ? autolinker.link(String(feature.properties['Jumlah PNS']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_Geotagging_3_0(feature) {
+            switch(String(feature.properties['Tipe'])) {
+                case 'Kantor SAR':
+                    return {
+                pane: 'pane_Geotagging_3',
+                radius: 4.0,
+                opacity: 1,
+                color: 'rgba(255,255,255,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1,
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(255,105,0,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Pos SAR':
+                    return {
+                pane: 'pane_Geotagging_3',
+                shape: 'diamond',
+                radius: 3.6,
+                opacity: 1,
+                color: 'rgba(128,17,25,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1,
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(219,30,42,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Unit Siaga SAR':
+                    return {
+                pane: 'pane_Geotagging_3',
+                shape: 'diamond',
+                radius: 3.6,
+                opacity: 1,
+                color: 'rgba(50,87,128,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1,
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(0,54,255,1.0)',
+                interactive: true,
+            }
+                    break;
+            }
+        }
+        map.createPane('pane_Geotagging_3');
+        map.getPane('pane_Geotagging_3').style.zIndex = 403;
+        map.getPane('pane_Geotagging_3').style['mix-blend-mode'] = 'normal';
+        var layer_Geotagging_3 = new L.geoJson(json_Geotagging_3, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_Geotagging_3',
+            layerName: 'layer_Geotagging_3',
+            pane: 'pane_Geotagging_3',
+            onEachFeature: pop_Geotagging_3,
+            pointToLayer: function (feature, latlng) {
+                var context = {
+                    feature: feature,
+                    variables: {}
+                };
+                return L.shapeMarker(latlng, style_Geotagging_3_0(feature));
+            },
+        });
+        bounds_group.addLayer(layer_Geotagging_3);
+        map.addLayer(layer_Geotagging_3);
+        function pop_SaranaSAR_4(feature, layer) {
+            var popupContent = '<table>\
+                    <tr>\
+                        <th scope="row">Nama Alut</th>\
+                        <td>' + (feature.properties['Name'] !== null ? autolinker.link(String(feature.properties['Name']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Jenis</th>\
+                        <td>' + (feature.properties['JENIS'] !== null ? autolinker.link(String(feature.properties['JENIS']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_SaranaSAR_4_0() {
+            return {
+                pane: 'pane_SaranaSAR_4',
+                radius: 2.8,
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1,
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(155,170,255,1.0)',
+                interactive: true,
+            }
+        }
+        map.createPane('pane_SaranaSAR_4');
+        map.getPane('pane_SaranaSAR_4').style.zIndex = 404;
+        map.getPane('pane_SaranaSAR_4').style['mix-blend-mode'] = 'normal';
+        var layer_SaranaSAR_4 = new L.geoJson(json_SaranaSAR_4, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_SaranaSAR_4',
+            layerName: 'layer_SaranaSAR_4',
+            pane: 'pane_SaranaSAR_4',
+            onEachFeature: pop_SaranaSAR_4,
+            pointToLayer: function (feature, latlng) {
+                var context = {
+                    feature: feature,
+                    variables: {}
+                };
+                return L.circleMarker(latlng, style_SaranaSAR_4_0(feature));
+            },
+        });
+        bounds_group.addLayer(layer_SaranaSAR_4);
+        map.addLayer(layer_SaranaSAR_4);
+        var overlaysTree = [
+            {label: '<img src="legend/SaranaSAR_4.png" /> Sarana SAR', layer: layer_SaranaSAR_4},
+            {label: 'Geotagging<br /><table><tr><td style="text-align: center;"><img src="legend/Geotagging_3_KantorSAR0.png" /></td><td>Kantor SAR</td></tr><tr><td style="text-align: center;"><img src="legend/Geotagging_3_PosSAR1.png" /></td><td>Pos SAR</td></tr><tr><td style="text-align: center;"><img src="legend/Geotagging_3_UnitSiagaSAR2.png" /></td><td>Unit Siaga SAR</td></tr></table>', layer: layer_Geotagging_3},
+        {label: '<b>Indonesia SRR</b>',  selectAllCheckbox: true, children: [
+            {label: '<img src="legend/IndonesiaSRR_2.png" /> Indonesia SRR', layer: layer_IndonesiaSRR_2},]},
+            {label: "Google Satellite", layer: layer_GoogleSatellite_1},
+            {label: "Google Road", layer: layer_GoogleRoad_0},]
+        var lay = L.control.layers.tree(null, overlaysTree,{
+            //namedToggle: true,
+            //selectorBack: false,
+            //closedSymbol: '&#8862; &#x1f5c0;',
+            //openedSymbol: '&#8863; &#x1f5c1;',
+            //collapseAll: 'Collapse all',
+            //expandAll: 'Expand all',
+            collapsed: true,
+        });
+        lay.addTo(map);
+        setBounds();
+
+        // ===== GIS Ortala: alat pengukuran garis dan polygon =====
+        var ortalaMeasureLayer = new L.FeatureGroup();
+        map.addLayer(ortalaMeasureLayer);
+
+        var ortalaDrawControl = new L.Control.Draw({
+            position: 'topleft',
+            draw: {
+                polyline: {
+                    shapeOptions: { color: '#f28c28', weight: 4 },
+                    metric: true,
+                    feet: false
+                },
+                polygon: {
+                    allowIntersection: false,
+                    showArea: true,
+                    shapeOptions: { color: '#168aad', weight: 3, fillOpacity: 0.20 }
+                },
+                rectangle: false,
+                circle: false,
+                circlemarker: false,
+                marker: false
+            },
+            edit: {
+                featureGroup: ortalaMeasureLayer,
+                remove: true
+            }
+        });
+        map.addControl(ortalaDrawControl);
+
+        var ortalaMeasurePanel = L.control({ position: 'bottomright' });
+        ortalaMeasurePanel.onAdd = function () {
+            this._div = L.DomUtil.create('div', 'ortala-measure-panel');
+            this._div.innerHTML =
+                '<div class="panel-title">Hasil Pengukuran</div>' +
+                '<div id="ortala-measure-result">Pilih ikon garis atau polygon di toolbar kiri.</div>';
+            L.DomEvent.disableClickPropagation(this._div);
+            L.DomEvent.disableScrollPropagation(this._div);
+            return this._div;
+        };
+        ortalaMeasurePanel.addTo(map);
+
+        function ortalaFormatDistance(meters) {
+            return meters >= 1000
+                ? (meters / 1000).toLocaleString('id-ID', { maximumFractionDigits: 3 }) + ' km'
+                : meters.toLocaleString('id-ID', { maximumFractionDigits: 1 }) + ' m';
+        }
+        function ortalaFormatArea(squareMeters) {
+            if (squareMeters >= 1000000) {
+                return (squareMeters / 1000000).toLocaleString('id-ID', { maximumFractionDigits: 3 }) + ' km²';
+            }
+            if (squareMeters >= 10000) {
+                return (squareMeters / 10000).toLocaleString('id-ID', { maximumFractionDigits: 3 }) + ' ha';
+            }
+            return squareMeters.toLocaleString('id-ID', { maximumFractionDigits: 1 }) + ' m²';
+        }
+        function ortalaCalculateResult(layer, type) {
+            if (type === 'polyline') {
+                var linePoints = layer.getLatLngs();
+                var lineDistance = 0;
+                for (var i = 1; i < linePoints.length; i++) {
+                    lineDistance += map.distance(linePoints[i - 1], linePoints[i]);
+                }
+                return '<b>Panjang garis:</b> ' + ortalaFormatDistance(lineDistance);
+            }
+            if (type === 'polygon' || layer instanceof L.Polygon) {
+                var polygonRings = layer.getLatLngs();
+                var outerRing = polygonRings[0];
+                var polygonArea = L.GeometryUtil.geodesicArea(outerRing);
+                var polygonPerimeter = 0;
+                for (var j = 0; j < outerRing.length; j++) {
+                    polygonPerimeter += map.distance(outerRing[j], outerRing[(j + 1) % outerRing.length]);
+                }
+                return '<b>Luas:</b> ' + ortalaFormatArea(polygonArea) +
+                       '<br><b>Keliling:</b> ' + ortalaFormatDistance(polygonPerimeter);
+            }
+            return 'Pengukuran tersedia untuk garis dan polygon.';
+        }
+        function ortalaShowResult(message) {
+            var resultNode = document.getElementById('ortala-measure-result');
+            if (resultNode) resultNode.innerHTML = message;
+        }
+
+        map.on(L.Draw.Event.CREATED, function (event) {
+            ortalaMeasureLayer.addLayer(event.layer);
+            ortalaShowResult(ortalaCalculateResult(event.layer, event.layerType));
+        });
+        map.on(L.Draw.Event.EDITED, function (event) {
+            var results = [];
+            event.layers.eachLayer(function (layer) {
+                results.push(ortalaCalculateResult(layer, layer instanceof L.Polygon ? 'polygon' : 'polyline'));
+            });
+            ortalaShowResult(results.length ? results.join('<hr>') : 'Geometri diperbarui.');
+        });
+        map.on(L.Draw.Event.DELETED, function () {
+            ortalaShowResult('Pengukuran dihapus. Gambar garis atau polygon baru melalui toolbar.');
+        });
+        // ===== Akhir alat pengukuran GIS Ortala =====
+
+        </script>        
+    </body>
+</html>
